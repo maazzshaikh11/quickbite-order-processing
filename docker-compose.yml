@@ -1,0 +1,116 @@
+name: quickbite
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: quickbite
+      POSTGRES_USER: quickbite
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quickbite}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quickbite -d quickbite"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-quickbite}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-quickbite}
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # Management UI: http://localhost:15672
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    command: ["python", "-m", "quickbite.api.main"]
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://quickbite:${POSTGRES_PASSWORD:-quickbite}@postgres:5432/quickbite
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-quickbite}:${RABBITMQ_PASSWORD:-quickbite}@rabbitmq:5672/
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  payment-worker:
+    build: .
+    command: ["python", "-m", "quickbite.workers.payment"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://quickbite:${POSTGRES_PASSWORD:-quickbite}@postgres:5432/quickbite
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-quickbite}:${RABBITMQ_PASSWORD:-quickbite}@rabbitmq:5672/
+      MAX_RETRIES: ${MAX_RETRIES:-3}
+      RETRY_BASE_DELAY_SECONDS: ${RETRY_BASE_DELAY_SECONDS:-5}
+      PREFETCH_COUNT: ${PREFETCH_COUNT:-5}
+      PAYMENT_FAILURE_MODE: ${PAYMENT_FAILURE_MODE:-random}
+      PAYMENT_FAILURE_RATE: ${PAYMENT_FAILURE_RATE:-0.25}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  restaurant-worker:
+    build: .
+    command: ["python", "-m", "quickbite.workers.restaurant"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://quickbite:${POSTGRES_PASSWORD:-quickbite}@postgres:5432/quickbite
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-quickbite}:${RABBITMQ_PASSWORD:-quickbite}@rabbitmq:5672/
+      MAX_RETRIES: ${MAX_RETRIES:-3}
+      RETRY_BASE_DELAY_SECONDS: ${RETRY_BASE_DELAY_SECONDS:-5}
+      PREFETCH_COUNT: ${PREFETCH_COUNT:-5}
+      RESTAURANT_DELAY_SECONDS: ${RESTAURANT_DELAY_SECONDS:-1.0}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  delivery-worker:
+    build: .
+    command: ["python", "-m", "quickbite.workers.delivery"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://quickbite:${POSTGRES_PASSWORD:-quickbite}@postgres:5432/quickbite
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-quickbite}:${RABBITMQ_PASSWORD:-quickbite}@rabbitmq:5672/
+      MAX_RETRIES: ${MAX_RETRIES:-3}
+      RETRY_BASE_DELAY_SECONDS: ${RETRY_BASE_DELAY_SECONDS:-5}
+      PREFETCH_COUNT: ${PREFETCH_COUNT:-5}
+      DELIVERY_DELAY_SECONDS: ${DELIVERY_DELAY_SECONDS:-1.0}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  notification-worker:
+    build: .
+    command: ["python", "-m", "quickbite.workers.notification"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://quickbite:${POSTGRES_PASSWORD:-quickbite}@postgres:5432/quickbite
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-quickbite}:${RABBITMQ_PASSWORD:-quickbite}@rabbitmq:5672/
+      MAX_RETRIES: ${MAX_RETRIES:-3}
+      RETRY_BASE_DELAY_SECONDS: ${RETRY_BASE_DELAY_SECONDS:-5}
+      PREFETCH_COUNT: ${PREFETCH_COUNT:-5}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
