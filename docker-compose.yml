@@ -2,6 +2,7 @@ name: quickbite
 
 services:
   postgres:
+    restart: unless-stopped
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: quickbite
@@ -16,6 +17,7 @@ services:
       retries: 10
 
   rabbitmq:
+    restart: unless-stopped
     image: rabbitmq:3.13-management-alpine
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-quickbite}
@@ -30,6 +32,7 @@ services:
       retries: 10
 
   api:
+    restart: unless-stopped
     build: .
     command: ["python", "-m", "quickbite.api.main"]
     ports:
@@ -45,6 +48,7 @@ services:
         condition: service_healthy
 
   payment-worker:
+    restart: unless-stopped
     build: .
     command: ["python", "-m", "quickbite.workers.payment"]
     environment:
@@ -63,6 +67,7 @@ services:
         condition: service_healthy
 
   restaurant-worker:
+    restart: unless-stopped
     build: .
     command: ["python", "-m", "quickbite.workers.restaurant"]
     environment:
@@ -80,6 +85,7 @@ services:
         condition: service_healthy
 
   delivery-worker:
+    restart: unless-stopped
     build: .
     command: ["python", "-m", "quickbite.workers.delivery"]
     environment:
@@ -97,6 +103,7 @@ services:
         condition: service_healthy
 
   notification-worker:
+    restart: unless-stopped
     build: .
     command: ["python", "-m", "quickbite.workers.notification"]
     environment:
